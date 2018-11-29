@@ -1,5 +1,6 @@
 import numpy as np
 from numba import njit, from_dtype, prange
+import numba
 
 
 PREDICTOR_RECORD_DTYPE = np.dtype([
@@ -51,10 +52,28 @@ def _predict_one_binned(nodes, binned_data):
             node = nodes[node['right']]
 
 
+@njit
+def _get_threads_chunks(total_size):
+    # Divide [0, total_size - 1] into n_threads contiguous regions, and
+    # returns the starts and ends of each region. Used to simulate a 'static'
+    # scheduling.
+    n_threads = numba.config.NUMBA_DEFAULT_NUM_THREADS
+    sizes = np.full(n_threads, total_size // n_threads, dtype=np.int32)
+    sizes[:total_size % n_threads] += 1
+    starts = np.zeros(n_threads, dtype=np.int32)
+    starts[1:] = np.cumsum(sizes[:-1])
+    ends = starts + sizes
+    return starts, ends, n_threads
+
+
 @njit(parallel=True)
 def _predict_binned(nodes, binned_data, out):
-    for i in prange(binned_data.shape[0]):
-        out[i] = _predict_one_binned(nodes, binned_data[i])
+    # for i in prange(binned_data.shape[0]):
+    #     out[i] = _predict_one_binned(nodes, binned_data[i])
+    starts, ends, n_threads = _get_threads_chunks(binned_data.shape[0])
+    for thread_idx in prange(n_threads):
+        for i in range(starts[thread_idx], ends[thread_idx]):
+            out[i] = _predict_one_binned(nodes, binned_data[i])
 
 
 @njit
@@ -71,5 +90,9 @@ def _predict_one_from_numeric_data(nodes, numeric_data):
 
 @njit(parallel=True)
 def _predict_from_numeric_data(nodes, numeric_data, out):
-    for i in prange(numeric_data.shape[0]):
-        out[i] = _predict_one_from_numeric_data(nodes, numeric_data[i])
+    # for i in prange(numeric_data.shape[0]):
+    #     out[i] = _predict_one_from_numeric_data(nodes, numeric_data[i])
+    starts, ends, n_threads = _get_threads_chunks(numeric_data.shape[0])
+    for thread_idx in prange(n_threads):
+        for i in range(starts[thread_idx], ends[thread_idx]):
+            out[i] = _predict_one_from_numeric_data(nodes, numeric_data[i])
