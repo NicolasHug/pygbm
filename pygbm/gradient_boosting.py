@@ -123,8 +123,6 @@ class BaseGradientBoostingMachine(BaseEstimator, ABC):
             X_binned_train, X_binned_val, y_train, y_val = train_test_split(
                 X_binned, y, test_size=self.validation_split,
                 stratify=stratify, random_state=rng)
-<<<<<<< HEAD
-=======
             if X_binned_train.size == 0 or X_binned_val.size == 0:
                 raise ValueError(
                     f'Not enough data (n_samples={X_binned.shape[0]}) to '
@@ -132,7 +130,6 @@ class BaseGradientBoostingMachine(BaseEstimator, ABC):
                     f'{self.validation_split}. Use more training data or '
                     f'adjust validation_split.'
                 )
->>>>>>> Fixed most checks, few more to investigate
             # Histogram computation is faster on feature-aligned data.
             X_binned_train = np.asfortranarray(X_binned_train)
         else:
@@ -362,9 +359,6 @@ class BaseGradientBoostingMachine(BaseEstimator, ABC):
         raw_predictions : array, shape (n_samples * n_trees_per_iteration,)
             The raw predicted values.
         """
-<<<<<<< HEAD
-        # TODO: check input / check_fitted
-=======
         X = check_array(X)
         check_is_fitted(self, 'predictors_')
         if X.shape[1] != self.n_features_:
@@ -372,7 +366,6 @@ class BaseGradientBoostingMachine(BaseEstimator, ABC):
                 f'X has {X.shape[1]} features but this estimator was '
                 f'trained with {self.n_features_} features.'
             )
->>>>>>> Fixed most checks, few more to investigate
         n_samples = X.shape[0]
         raw_predictions = np.zeros(
             shape=(n_samples, self.n_trees_per_iteration_),
