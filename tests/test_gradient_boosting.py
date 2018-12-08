@@ -174,6 +174,7 @@ def test_early_stopping_classification(data, scoring, validation_split, tol):
         assert gb.n_iter_ == max_iter
 
 
+# TODO: Remove if / when numba issue 3569 is fixed.
 def custom_check_estimator(Estimator):
     # Same as sklearn.check_estimator, skipping tests that can't succeed.
 
@@ -191,13 +192,6 @@ def custom_check_estimator(Estimator):
             # X is both Fortran and C aligned and numba can't compile.
             # Opened numba issue 3569 (not sure if this is by design)
             continue
-        if check is estimator_checks.check_classifiers_classes:
-            # TODO: investigate
-            continue
-        if check is estimator_checks.check_classifiers_train:
-            # proba don't sum to 1 to the 7th decimal (still very close)
-            # TODO: check other test inside this one
-            continue
         try:
             check(name, estimator)
         except SkipTest as exception:
@@ -211,9 +205,16 @@ def custom_check_estimator(Estimator):
     reason="Potentially long")
 @pytest.mark.parametrize('Estimator', (
     GradientBoostingRegressor(),
-    GradientBoostingClassifier(scoring=None)))
+    GradientBoostingClassifier(scoring=None, min_samples_leaf=5),))
 def test_estimator_checks(Estimator):
-    # Can't do early stopping with classifier because often
-    # validation_split=.1 --> test_size=2 < n_classes and train_test_split
-    # raises an error.
+    # Run the check_estimator() test suite on GBRegressor and GBClassifier.
+
+    # Notes:
+    # - Can't do early stopping with classifier because often
+    #   validation_split=.1 leads to test_size=2 < n_classes and
+    #   train_test_split raises an error.
+    # - Also, need to set a low min_samples_leaf for
+    #   check_classifiers_classes() to pass: with only 30 samples on the
+    #   dataset, the root is never split with min_samples_leaf=20 and only the
+    #   majority class is predicted.
     custom_check_estimator(Estimator)
