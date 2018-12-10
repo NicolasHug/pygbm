@@ -97,6 +97,11 @@ class BaseGradientBoostingMachine(BaseEstimator, ABC):
         # TODO: test input checking
         X, y = check_X_y(X, y, dtype=[np.float32, np.float64])
         y = self._encode_y(y)
+        if X.shape[0] == 1 or X.shape[1] == 1:
+            raise ValueError(
+                'Passing only one sample or one feature is not supported yet. '
+                'See numba issue #3569.'
+            )
         rng = check_random_state(self.random_state)
 
         self._validate_parameters()

@@ -90,24 +90,17 @@ def test_init_parameters_validation(GradientBoosting, X, y):
     )
 
 
-@pytest.mark.parametrize('n_classes', (2, 3))
-@pytest.mark.parametrize('mapping', (lambda x: str(x),
-                                     lambda x: 2 * x))
-def test_classification_input(n_classes, mapping):
-    # check that GradientBoostingClassifier supports classes encoded as
-    # strings or non contiguous ints.
-    # TODO: maybe remove once we run the sklearn test suite?
-    X, y = make_classification(n_classes=n_classes, n_clusters_per_class=1)
-
-    y_mapped = [mapping(target) for target in y]
-
-    gbc = GradientBoostingClassifier(scoring=None, random_state=0)
-    pred = gbc.fit(X, y).predict(X)
-    pred_mapped = gbc.fit(X, y_mapped).predict(X)
-
-    pred_mapped_after = [mapping(target) for target in pred]
-
-    assert_array_equal(pred_mapped, pred_mapped_after)
+def test_one_sample_one_feature():
+    # Until numba issue #3569 is fixed, we raise an informative error message
+    # when X is only one sample or one feature in fit (it's OK in predict).
+    # The array is both F and C contiguous, and numba can't compile.
+    gb = GradientBoostingClassifier()
+    for X, y in (([[1, 2]], [0]), ([[1], [2]], [0, 1])):
+        assert_raises_regex(
+            ValueError,
+            'Passing only one sample or one feature is not supported yet.',
+            gb.fit, X, y
+        )
 
 
 @pytest.mark.skipif(
@@ -174,7 +167,8 @@ def test_early_stopping_classification(data, scoring, validation_split, tol):
         assert gb.n_iter_ == max_iter
 
 
-# TODO: Remove if / when numba issue 3569 is fixed.
+# TODO: Remove if / when numba issue 3569 is fixed and check_classifiers_train
+# is less strict
 def custom_check_estimator(Estimator):
     # Same as sklearn.check_estimator, skipping tests that can't succeed.
 
@@ -190,7 +184,7 @@ def custom_check_estimator(Estimator):
         if (check is estimator_checks.check_fit2d_1feature or
                 check is estimator_checks.check_fit2d_1sample):
             # X is both Fortran and C aligned and numba can't compile.
-            # Opened numba issue 3569 (not sure if this is by design)
+            # Opened numba issue 3569
             continue
         if check is estimator_checks.check_classifiers_train:
             continue # probas don't exactly sum to 1 (very close though)
