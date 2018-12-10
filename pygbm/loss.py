@@ -3,7 +3,8 @@ from abc import ABC, abstractmethod
 from scipy.special import expit, logsumexp
 import numpy as np
 from numba import njit, prange
-import numba
+
+from .utils import _get_threads_chunks
 
 
 # TODO: Write proper docstrings
@@ -20,21 +21,6 @@ def _logsumexp(a):
 
     s = np.sum(np.exp(a - a_max))
     return np.log(s) + a_max
-
-
-@njit
-def _get_threads_chunks(total_size):
-    # Divide [0, total_size - 1] into n_threads contiguous regions, and
-    # returns the starts and ends of each region. Used to simulate a 'static'
-    # scheduling.
-    n_threads = numba.config.NUMBA_DEFAULT_NUM_THREADS
-    sizes = np.full(n_threads, total_size // n_threads, dtype=np.int32)
-    sizes[:total_size % n_threads] += 1
-    starts = np.zeros(n_threads, dtype=np.int32)
-    starts[1:] = np.cumsum(sizes[:-1])
-    ends = starts + sizes
-
-    return starts, ends, n_threads
 
 
 @njit(fastmath=True)

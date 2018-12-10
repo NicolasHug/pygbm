@@ -1,7 +1,8 @@
+import numpy as np
+from numba import njit
+from numba import config as numba_config
 from lightgbm import LGBMRegressor
 from lightgbm import LGBMClassifier
-
-from .gradient_boosting import GradientBoostingClassifier
 
 
 def get_lightgbm_estimator(pygbm_estimator):
@@ -10,6 +11,9 @@ def get_lightgbm_estimator(pygbm_estimator):
     This utility function takes care of renaming the PyGBM parameters into
     their LightGBM equivalent parameters.
     """
+
+    # Import here to avoid cyclic dependencies
+    from .gradient_boosting import GradientBoostingClassifier
 
     pygbm_params = pygbm_estimator.get_params()
 
@@ -53,3 +57,21 @@ def get_lightgbm_estimator(pygbm_estimator):
         Est = LGBMRegressor
 
     return Est(**lgbm_params)
+
+
+@njit
+def _get_threads_chunks(total_size):
+    # Divide [0, total_size - 1] into n_threads contiguous regions, and
+    # returns the starts and ends of each region. Used to simulate a 'static'
+    # scheduling.
+    n_threads = numba_config.NUMBA_DEFAULT_NUM_THREADS
+    sizes = np.full(n_threads, total_size // n_threads, dtype=np.int32)
+    if total_size % n_threads > 0:
+        # array[:0] will cause a bug in numba 0.41 so we need the if.
+        # Remove once issue numba 3554 is fixed.
+        sizes[:total_size % n_threads] += 1
+    starts = np.zeros(n_threads, dtype=np.int32)
+    starts[1:] = np.cumsum(sizes[:-1])
+    ends = starts + sizes
+
+    return starts, ends, n_threads
