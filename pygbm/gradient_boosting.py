@@ -459,6 +459,16 @@ class GradientBoostingRegressor(BaseGradientBoostingMachine, RegressorMixin):
         is enabled. See
         `scikit-learn glossary
         <https://scikit-learn.org/stable/glossary.html#term-random-state>`_.
+
+
+    Examples
+    --------
+    >>> from sklearn.datasets import load_boston
+    >>> from pygbm import GradientBoostingRegressor
+    >>> X, y = load_boston(return_X_y=True)
+    >>> est = GradientBoostingRegressor().fit(X, y)
+    >>> est.score(X, y)
+    0.92...
     """
 
     _VALID_LOSSES = ('least_squares',)
@@ -582,6 +592,15 @@ class GradientBoostingClassifier(BaseGradientBoostingMachine, ClassifierMixin):
         binning process, and the train/validation data split if early stopping
         is enabled. See `scikit-learn glossary
         <https://scikit-learn.org/stable/glossary.html#term-random-state>`_.
+
+    Examples
+    --------
+    >>> from sklearn.datasets import load_iris
+    >>> from pygbm import GradientBoostingClassifier
+    >>> X, y = load_iris(return_X_y=True)
+    >>> clf = GradientBoostingClassifier().fit(X, y)
+    >>> clf.score(X, y)
+    0.97...
     """
 
     _VALID_LOSSES = ('binary_crossentropy', 'categorical_crossentropy',
