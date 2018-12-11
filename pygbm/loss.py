@@ -56,6 +56,10 @@ class Loss(ABC):
         return gradients, hessians
 
     @abstractmethod
+    def get_init_prediction(self, y_train, n_trees_per_iteration):
+        pass
+
+    @abstractmethod
     def update_gradients_and_hessians(self, gradients, hessians, y_true,
                                       raw_predictions):
         pass
@@ -71,6 +75,9 @@ class LeastSquares(Loss):
         raw_predictions = raw_predictions.reshape(-1)
         loss = np.power(y_true - raw_predictions, 2)
         return loss.mean() if average else loss
+
+    def get_init_prediction(self, y_train, n_trees_per_iteration):
+        return np.mean(y_train)
 
     def inverse_link_function(self, raw_predictions):
         return raw_predictions
@@ -108,6 +115,13 @@ class BinaryCrossEntropy(Loss):
         # logaddexp(0, x) = log(1 + exp(x))
         loss = np.logaddexp(0, raw_predictions) - y_true * raw_predictions
         return loss.mean() if average else loss
+
+    def get_init_prediction(self, y_train, n_trees_per_iteration):
+        proba_positive_class = np.mean(y_train)
+        eps = 1e-15
+        proba_positive_class = np.clip(proba_positive_class, eps, 1 - eps)
+        # log(x / 1 - x) is the anti function of sigmoid
+        return np.log(proba_positive_class / (1 - proba_positive_class))
 
     def update_gradients_and_hessians(self, gradients, hessians, y_true,
                                       raw_predictions):
@@ -155,6 +169,19 @@ class CategoricalCrossEntropy(Loss):
 
         return (logsumexp(raw_predictions, axis=1) -
                 (one_hot_true * raw_predictions).sum(axis=1))
+
+    def get_init_prediction(self, y_train, n_trees_per_iteration):
+        init_value = np.zeros(
+            shape=(1, n_trees_per_iteration),
+            dtype=np.float32
+        )
+        eps = 1e-15
+        for k in range(n_trees_per_iteration):
+            proba_kth_class = np.mean(y_train == k)
+            proba_kth_class = np.clip(proba_kth_class, eps, 1 - eps)
+            init_value[:, k] += np.log(proba_kth_class)
+
+        return init_value
 
     def update_gradients_and_hessians(self, gradients, hessians, y_true,
                                       raw_predictions):
