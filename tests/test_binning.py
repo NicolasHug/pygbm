@@ -2,7 +2,7 @@ import numpy as np
 from numpy.testing import assert_array_equal, assert_allclose
 import pytest
 
-from pygbm.binning import BinMapper, find_binning_thresholds, _map_to_bins
+from pygbm.binning import BinMapper, _find_binning_thresholds, _map_to_bins
 
 
 DATA = np.random.RandomState(42).normal(
@@ -12,31 +12,31 @@ DATA = np.random.RandomState(42).normal(
 
 def test_find_binning_thresholds_regular_data():
     data = np.linspace(0, 10, 1001).reshape(-1, 1)
-    bin_thresholds = find_binning_thresholds(data, max_bins=10)
+    bin_thresholds = _find_binning_thresholds(data, max_bins=10)
     assert_allclose(bin_thresholds[0], [1, 2, 3, 4, 5, 6, 7, 8, 9])
 
-    bin_thresholds = find_binning_thresholds(data, max_bins=5)
+    bin_thresholds = _find_binning_thresholds(data, max_bins=5)
     assert_allclose(bin_thresholds[0], [2, 4, 6, 8])
 
 
 def test_find_binning_thresholds_small_regular_data():
     data = np.linspace(0, 10, 11).reshape(-1, 1)
 
-    bin_thresholds = find_binning_thresholds(data, max_bins=5)
+    bin_thresholds = _find_binning_thresholds(data, max_bins=5)
     assert_allclose(bin_thresholds[0], [2, 4, 6, 8])
 
-    bin_thresholds = find_binning_thresholds(data, max_bins=10)
+    bin_thresholds = _find_binning_thresholds(data, max_bins=10)
     assert_allclose(bin_thresholds[0], [1, 2, 3, 4, 5, 6, 7, 8, 9])
 
-    bin_thresholds = find_binning_thresholds(data, max_bins=11)
+    bin_thresholds = _find_binning_thresholds(data, max_bins=11)
     assert_allclose(bin_thresholds[0], np.arange(10) + .5)
 
-    bin_thresholds = find_binning_thresholds(data, max_bins=255)
+    bin_thresholds = _find_binning_thresholds(data, max_bins=255)
     assert_allclose(bin_thresholds[0], np.arange(10) + .5)
 
 
 def test_find_binning_thresholds_random_data():
-    bin_thresholds = find_binning_thresholds(DATA, random_state=0)
+    bin_thresholds = _find_binning_thresholds(DATA, random_state=0)
     assert len(bin_thresholds) == 2
     for i in range(len(bin_thresholds)):
         assert bin_thresholds[i].shape == (255,)  # 256 - 1
@@ -50,8 +50,8 @@ def test_find_binning_thresholds_random_data():
 
 
 def test_find_binning_thresholds_low_n_bins():
-    bin_thresholds = find_binning_thresholds(DATA, max_bins=128,
-                                             random_state=0)
+    bin_thresholds = _find_binning_thresholds(DATA, max_bins=128,
+                                              random_state=0)
     assert len(bin_thresholds) == 2
     for i in range(len(bin_thresholds)):
         assert bin_thresholds[i].shape == (127,)  # 128 - 1
@@ -60,13 +60,13 @@ def test_find_binning_thresholds_low_n_bins():
 
 def test_find_binning_thresholds_invalid_n_bins():
     with pytest.raises(ValueError):
-        find_binning_thresholds(DATA, max_bins=1024)
+        _find_binning_thresholds(DATA, max_bins=1024)
 
 
 @pytest.mark.parametrize('n_bins', [16, 128, 256])
 def test_map_to_bins(n_bins):
-    bin_thresholds = find_binning_thresholds(DATA, max_bins=n_bins,
-                                             random_state=0)
+    bin_thresholds = _find_binning_thresholds(DATA, max_bins=n_bins,
+                                              random_state=0)
     binned = _map_to_bins(DATA, bin_thresholds)
     assert binned.shape == DATA.shape
     assert binned.dtype == np.uint8
