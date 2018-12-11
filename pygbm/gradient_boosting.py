@@ -172,21 +172,19 @@ class BaseGradientBoostingMachine(BaseEstimator, ABC):
         # (n_iter_, n_trees_per_iteration)
         self.predictors_ = predictors = []
 
-        scorer = check_scoring(self, self.scoring)
+        # scorer_ is a callable with signature (est, X, y) and calls
+        # est.predict() or est.predict_proba() depending on its nature.
+        self.scorer_ = check_scoring(self, self.scoring)
         self.train_scores_ = []
         if self.scoring is not None:
             # Add predictions of the initial model (before the first tree)
-            predicted_train = self._predict_binned(X_binned_train)
-            score_train = scorer._sign * scorer._score_func(y_train,
-                                                            predicted_train)
-            self.train_scores_.append(score_train)
+            self.train_scores_.append(
+                self.scorer_(self, X_binned_train, y_train))
 
             if self.validation_split is not None:
                 self.validation_scores_ = []
-                predicted_val = self._predict_binned(X_binned_val)
-                score_val = scorer._sign * scorer._score_func(y_val,
-                                                              predicted_val)
-                self.validation_scores_.append(score_val)
+                self.validation_scores_.append(
+                    self.scorer_(self, X_binned_val, y_val))
 
         for iteration in range(self.max_iter):
 
@@ -239,7 +237,7 @@ class BaseGradientBoostingMachine(BaseEstimator, ABC):
                 acc_prediction_time += toc_pred - tic_pred
 
             should_stop = self._check_early_stopping(
-                scorer, X_binned_small_train, y_small_train,
+                X_binned_small_train, y_small_train,
                 X_binned_val, y_val)
 
             if self.verbose:
@@ -271,7 +269,7 @@ class BaseGradientBoostingMachine(BaseEstimator, ABC):
             self.validation_scores_ = np.asarray(self.validation_scores_)
         return self
 
-    def _check_early_stopping(self, scorer, X_binned_train, y_train,
+    def _check_early_stopping(self, X_binned_train, y_train,
                               X_binned_val, y_val):
         """Check if fitting should be early-stopped.
 
@@ -293,25 +291,29 @@ class BaseGradientBoostingMachine(BaseEstimator, ABC):
                 # tree.
                 return False
 
+            # The higher the tol, the more likely we are to early stop. We
+            # thus want to (artificially) increase the value of prev_score by
+            # tol percent and check if it's higher than the current score, in
+            # which case we early stop. As in scikit-learn scorers "higher is
+            # always better", the 'error' metrics such as `neg_mse` or
+            # `neg_log_loss` output negative values so the scores are
+            # negative. We thus need to multiply tol by -1 in those cases,
+            # else we would actually decrease prev_score instead of increasing
+            # it.
+
             current_score = scores[-1]  # score at current iteration
             previous_scores = scores[-self.n_iter_no_change:-1]
+            sign = self.scorer_._sign
             return all(
-                current_score < prev_score * (1 + self.tol * scorer._sign)
+                current_score < prev_score * (1 + self.tol * sign)
                 for prev_score in previous_scores
             )
 
-        # TODO: make sure that self.predict can work on binned data and
-        # then only use the public scorer.__call__.
-        predicted_train = self._predict_binned(X_binned_train)
-        score_train = scorer._sign * scorer._score_func(y_train,
-                                                        predicted_train)
-        self.train_scores_.append(score_train)
+        self.train_scores_.append(self.scorer_(self, X_binned_train, y_train))
 
         if self.validation_split is not None:
-            predicted_val = self._predict_binned(X_binned_val)
-            score_val = scorer._sign * scorer._score_func(y_val,
-                                                          predicted_val)
-            self.validation_scores_.append(score_val)
+            self.validation_scores_.append(
+                self.scorer_(self, X_binned_val, y_val))
             return _should_stop(self.validation_scores_)
 
         return _should_stop(self.train_scores_)
@@ -349,15 +351,14 @@ class BaseGradientBoostingMachine(BaseEstimator, ABC):
 
         print(log_msg)
 
-    def _raw_predict(self, X, binned=False):
+    def _raw_predict(self, X):
         """Return the sum of the leaves values over all predictors.
 
         Parameters
         ----------
         X : array-like, shape=(n_samples, n_features)
-            The input samples.
-        binned : bool, optional (default=False)
-            If True, X is considered to be already binned.
+            The input samples. If ``X.dtype == np.uint8``, the data is assumed
+            to be pre-binned.
 
         Returns
         -------
@@ -377,9 +378,10 @@ class BaseGradientBoostingMachine(BaseEstimator, ABC):
             dtype=np.float32
         )
         # Should we parallelize this?
+        is_binned = X.dtype == np.uint8
         for predictors_of_ith_iteration in self.predictors_:
             for k, predictor in enumerate(predictors_of_ith_iteration):
-                predict = (predictor.predict_binned if binned
+                predict = (predictor.predict_binned if is_binned
                            else predictor.predict)
                 raw_predictions[:, k] += predict(X)
 
@@ -397,10 +399,6 @@ class BaseGradientBoostingMachine(BaseEstimator, ABC):
     def n_iter_(self):
         check_is_fitted(self, 'predictors_')
         return len(self.predictors_)
-
-    @abstractmethod
-    def _predict_binned(self, X_binned):
-        pass
 
 
 class GradientBoostingRegressor(BaseGradientBoostingMachine, RegressorMixin):
@@ -482,7 +480,8 @@ class GradientBoostingRegressor(BaseGradientBoostingMachine, RegressorMixin):
         Parameters
         ----------
         X : array-like, shape=(n_samples, n_features)
-            The input samples.
+            The input samples. If ``X.dtype == np.uint8``, the data is assumed
+            to be pre-binned.
 
         Returns
         -------
@@ -491,24 +490,7 @@ class GradientBoostingRegressor(BaseGradientBoostingMachine, RegressorMixin):
         """
         # Return raw predictions after converting shape
         # (n_samples, 1) to (n_samples,)
-        return self._raw_predict(X, binned=False).ravel()
-
-    def _predict_binned(self, X_binned):
-        """Predict values for binned data X.
-
-        Parameters
-        ----------
-        X_binned : array-like, shape=(n_samples, n_features)
-            The binned input samples. Entries should be integers.
-
-        Returns
-        -------
-        y : array, shape (n_samples,)
-            The predicted values.
-        """
-        # Return raw predictions after converting shape
-        # (n_samples, 1) to (n_samples,)
-        return self._raw_predict(X_binned, binned=True).ravel()
+        return self._raw_predict(X).ravel()
 
     def _encode_y(self, y):
         # Just convert y to float32
@@ -586,7 +568,7 @@ class GradientBoostingClassifier(BaseGradientBoostingMachine, ClassifierMixin):
 
     def __init__(self, loss='auto', learning_rate=0.1, max_iter=100,
                  max_leaf_nodes=31, max_depth=None, min_samples_leaf=20,
-                 l2_regularization=0., max_bins=256, scoring='accuracy',
+                 l2_regularization=0., max_bins=256, scoring='neg_log_loss',
                  validation_split=0.1, n_iter_no_change=5, tol=1e-7,
                  verbose=0, random_state=None):
         super(GradientBoostingClassifier, self).__init__(
@@ -604,7 +586,8 @@ class GradientBoostingClassifier(BaseGradientBoostingMachine, ClassifierMixin):
         Parameters
         ----------
         X : array-like, shape=(n_samples, n_features)
-            The input samples.
+            The input samples. If ``X.dtype == np.uint8``, the data is assumed
+            to be pre-binned.
 
         Returns
         -------
@@ -621,7 +604,8 @@ class GradientBoostingClassifier(BaseGradientBoostingMachine, ClassifierMixin):
         Parameters
         ----------
         X : array-like, shape=(n_samples, n_features)
-            The input samples.
+            The input samples. If ``X.dtype == np.uint8``, the data is assumed
+            to be pre-binned.
 
         Returns
         -------
@@ -630,24 +614,6 @@ class GradientBoostingClassifier(BaseGradientBoostingMachine, ClassifierMixin):
         """
         raw_predictions = self._raw_predict(X)
         return self.loss_.predict_proba(raw_predictions)
-
-    def _predict_binned(self, X_binned):
-        """Predict classes for binned data X.
-
-        Parameters
-        ----------
-        X_binned : array-like, shape=(n_samples, n_features)
-            The binned input samples. Entries should be integers.
-
-        Returns
-        -------
-        y : array, shape (n_samples,)
-            The predicted classes.
-        """
-        raw_predictions = self._raw_predict(X_binned, binned=True)
-        probas = self.loss_.predict_proba(raw_predictions)
-        encoded_classes = np.argmax(probas, axis=1)
-        return self.classes_[encoded_classes]
 
     def _encode_y(self, y):
         # encode classes into 0 ... n_classes - 1 and sets attributes classes_
