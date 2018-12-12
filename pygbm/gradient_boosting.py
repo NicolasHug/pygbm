@@ -156,15 +156,15 @@ class BaseGradientBoostingMachine(BaseEstimator, ABC):
             print("Fitting gradient boosted rounds:")
 
         n_samples = X_binned_train.shape[0]
-        self.init_predictions_ = self.loss_.get_init_prediction(
+        self.baseline_prediction_ = self.loss_.get_baseline_prediction(
             y_train, self.n_trees_per_iteration_)
-        # raw_predictions are the values predicted by the trees for the
-        # training data.
+        # raw_predictions are the accumulated values predicted by the trees
+        # for the training data.
         raw_predictions = np.zeros(
             shape=(n_samples, self.n_trees_per_iteration_),
-            dtype=np.float32
+            dtype=self.baseline_prediction_.dtype
         )
-        raw_predictions += self.init_predictions_
+        raw_predictions += self.baseline_prediction_
 
         # gradients and hessians are 1D arrays of size
         # n_samples * n_trees_per_iteration
@@ -379,9 +379,9 @@ class BaseGradientBoostingMachine(BaseEstimator, ABC):
         n_samples = X.shape[0]
         raw_predictions = np.zeros(
             shape=(n_samples, self.n_trees_per_iteration_),
-            dtype=np.float32
+            dtype=self.baseline_prediction_.dtype
         )
-        raw_predictions += self.init_predictions_
+        raw_predictions += self.baseline_prediction_
         # Should we parallelize this?
         for predictors_of_ith_iteration in self.predictors_:
             for k, predictor in enumerate(predictors_of_ith_iteration):

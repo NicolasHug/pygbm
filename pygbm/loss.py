@@ -56,7 +56,21 @@ class Loss(ABC):
         return gradients, hessians
 
     @abstractmethod
-    def get_init_prediction(self, y_train, n_trees_per_iteration):
+    def get_baseline_prediction(self, y_train, n_trees_per_iteration):
+        """Return initial predictions (before the first iteration).
+
+        Parameters
+        ----------
+        y_train : array-like, shape=(n_samples,)
+            The target training values.
+        n_trees_per_iteration : int
+            The number of trees per iteration.
+
+        Returns
+        -------
+        baseline_prediction: float or array of shape (1, n_tree_per_iteration)
+            The baseline prediction.
+        """
         pass
 
     @abstractmethod
@@ -76,7 +90,7 @@ class LeastSquares(Loss):
         loss = np.power(y_true - raw_predictions, 2)
         return loss.mean() if average else loss
 
-    def get_init_prediction(self, y_train, n_trees_per_iteration):
+    def get_baseline_prediction(self, y_train, n_trees_per_iteration):
         return np.mean(y_train)
 
     def inverse_link_function(self, raw_predictions):
@@ -116,11 +130,12 @@ class BinaryCrossEntropy(Loss):
         loss = np.logaddexp(0, raw_predictions) - y_true * raw_predictions
         return loss.mean() if average else loss
 
-    def get_init_prediction(self, y_train, n_trees_per_iteration):
+    def get_baseline_prediction(self, y_train, n_trees_per_iteration):
         proba_positive_class = np.mean(y_train)
-        eps = 1e-15
+        eps = np.finfo(y_train.dtype).eps
         proba_positive_class = np.clip(proba_positive_class, eps, 1 - eps)
-        # log(x / 1 - x) is the anti function of sigmoid
+        # log(x / 1 - x) is the anti function of sigmoid, or the link function
+        # of the Binomial model.
         return np.log(proba_positive_class / (1 - proba_positive_class))
 
     def update_gradients_and_hessians(self, gradients, hessians, y_true,
@@ -170,12 +185,12 @@ class CategoricalCrossEntropy(Loss):
         return (logsumexp(raw_predictions, axis=1) -
                 (one_hot_true * raw_predictions).sum(axis=1))
 
-    def get_init_prediction(self, y_train, n_trees_per_iteration):
+    def get_baseline_prediction(self, y_train, n_trees_per_iteration):
         init_value = np.zeros(
             shape=(1, n_trees_per_iteration),
             dtype=np.float32
         )
-        eps = 1e-15
+        eps = np.finfo(y_train.dtype).eps
         for k in range(n_trees_per_iteration):
             proba_kth_class = np.mean(y_train == k)
             proba_kth_class = np.clip(proba_kth_class, eps, 1 - eps)

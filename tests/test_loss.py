@@ -2,6 +2,7 @@ import numpy as np
 from numpy.testing import assert_almost_equal
 from scipy.optimize import newton
 from scipy.special import logsumexp
+from sklearn.utils import assert_all_finite
 import pytest
 
 from pygbm.loss import _LOSSES
@@ -152,3 +153,32 @@ def test_logsumexp():
     b = np.full(n, 10000, dtype='float64')
     desired = 10000.0 + np.log(n)
     assert_almost_equal(_logsumexp(b), desired)
+
+
+def test_baseline_predictions():
+    # Tests for the get_baseline_prediction() method of the losses
+    rng = np.random.RandomState(0)
+
+    # check that least squares return the mean of y_true
+    loss = _LOSSES['least_squares']()
+    y_true = rng.normal(size=100)
+    assert_almost_equal(loss.get_baseline_prediction(y_true, None),
+                        y_true.mean())
+
+    # test when there is only one class in training data
+    for loss_name, n_trees_per_iteration in (
+            ('binary_crossentropy', 1), ('categorical_crossentropy', 5)):
+        for y_true in (np.zeros(shape=100), np.ones(shape=100)):
+            y_true = y_true.astype(np.float32)
+            loss = _LOSSES[loss_name]()
+            init = loss.get_baseline_prediction(y_true, n_trees_per_iteration)
+            assert_all_finite(init)
+
+    # check that the init values are constants
+    for loss_name, n_trees_per_iteration in (
+            ('binary_crossentropy', 1), ('categorical_crossentropy', 5)):
+        loss = _LOSSES[loss_name]()
+        y_true = rng.randint(0, n_trees_per_iteration + 1,
+                             size=1000).astype(np.float32)
+        init = loss.get_baseline_prediction(y_true, n_trees_per_iteration)
+        assert np.unique(init).size == n_trees_per_iteration
