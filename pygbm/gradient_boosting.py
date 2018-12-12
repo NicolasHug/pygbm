@@ -170,7 +170,7 @@ class BaseGradientBoostingMachine(BaseEstimator, ABC):
         # n_samples * n_trees_per_iteration
         gradients, hessians = self.loss_.init_gradients_and_hessians(
             n_samples=n_samples,
-            n_trees_per_iteration=self.n_trees_per_iteration_
+            prediction_dim=self.n_trees_per_iteration_
         )
 
         # predictors_ is a matrix of TreePredictor objects with shape

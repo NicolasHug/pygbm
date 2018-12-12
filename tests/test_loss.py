@@ -79,12 +79,12 @@ def test_derivatives(loss, x0, y_true):
     assert np.allclose(get_gradients(y_true, optimum), 0)
 
 
-@pytest.mark.parametrize('loss, n_classes, n_trees_per_iteration', [
+@pytest.mark.parametrize('loss, n_classes, prediction_dim', [
     ('least_squares', 0, 1),
     ('binary_crossentropy', 2, 1),
     ('categorical_crossentropy', 3, 3),
 ])
-def test_numerical_gradients(loss, n_classes, n_trees_per_iteration):
+def test_numerical_gradients(loss, n_classes, prediction_dim):
     # Make sure gradients and hessians computed in the loss are correct, by
     # comparing with their approximations computed with finite central
     # differences.
@@ -97,7 +97,7 @@ def test_numerical_gradients(loss, n_classes, n_trees_per_iteration):
     else:
         y_true = rng.randint(0, n_classes, size=n_samples).astype(np.float64)
     raw_predictions = rng.normal(
-        size=(n_samples, n_trees_per_iteration)
+        size=(n_samples, prediction_dim)
     ).astype(np.float64)
     loss = _LOSSES[loss]()
     get_gradients, get_hessians = get_derivatives_helper(loss)
