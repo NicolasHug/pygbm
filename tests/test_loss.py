@@ -155,30 +155,31 @@ def test_logsumexp():
     assert_almost_equal(_logsumexp(b), desired)
 
 
-def test_baseline_predictions():
-    # Tests for the get_baseline_prediction() method of the losses
+def test_baseline_least_squares():
     rng = np.random.RandomState(0)
 
-    # check that least squares return the mean of y_true
     loss = _LOSSES['least_squares']()
-    y_true = rng.normal(size=100)
-    assert_almost_equal(loss.get_baseline_prediction(y_true, None),
-                        y_true.mean())
+    y_train = rng.normal(size=100)
+    baseline_prediction = loss.get_baseline_prediction(y_train, 1)
+    assert baseline_prediction.shape == tuple()  # float
+    assert_almost_equal(baseline_prediction, y_train.mean())
 
-    # test when there is only one class in training data
-    for loss_name, n_trees_per_iteration in (
-            ('binary_crossentropy', 1), ('categorical_crossentropy', 5)):
-        for y_true in (np.zeros(shape=100), np.ones(shape=100)):
-            y_true = y_true.astype(np.float32)
-            loss = _LOSSES[loss_name]()
-            init = loss.get_baseline_prediction(y_true, n_trees_per_iteration)
-            assert_all_finite(init)
 
-    # check that the init values are constants
-    for loss_name, n_trees_per_iteration in (
-            ('binary_crossentropy', 1), ('categorical_crossentropy', 5)):
-        loss = _LOSSES[loss_name]()
-        y_true = rng.randint(0, n_trees_per_iteration + 1,
-                             size=1000).astype(np.float32)
-        init = loss.get_baseline_prediction(y_true, n_trees_per_iteration)
-        assert np.unique(init).size == n_trees_per_iteration
+def test_baseline_binary_crossentropy():
+    loss = _LOSSES['binary_crossentropy']()
+    for y_train in (np.zeros(shape=100), np.ones(shape=100)):
+        y_train = y_train.astype(np.float32)
+        baseline_prediction = loss.get_baseline_prediction(y_train, 1)
+        assert baseline_prediction.shape == tuple()  # float
+        assert_all_finite(baseline_prediction)
+
+
+def test_baseline_categorical_crossentropy():
+    prediction_dim = 4
+    loss = _LOSSES['categorical_crossentropy']()
+    for y_train in (np.zeros(shape=100), np.ones(shape=100)):
+        y_train = y_train.astype(np.float32)
+        baseline_prediction = loss.get_baseline_prediction(y_train,
+                                                           prediction_dim)
+        assert baseline_prediction.shape == (1, prediction_dim)
+        assert_all_finite(baseline_prediction)
