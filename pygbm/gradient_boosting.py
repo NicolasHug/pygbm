@@ -135,22 +135,24 @@ class BaseGradientBoostingMachine(BaseEstimator, ABC):
                     f'{self.validation_split}. Use more training data or '
                     f'adjust validation_split.'
                 )
-            # Histogram computation is faster on feature-aligned data.
+            # Predicting is faster of C-contiguous arrays, training is faster
+            # on Fortran arrays.
+            X_binned_val = np.ascontiguousarray(X_binned_val)
             X_binned_train = np.asfortranarray(X_binned_train)
         else:
             X_binned_train, y_train = X_binned, y
             X_binned_val, y_val = None, None
 
         # Subsample the training set for score-based monitoring.
-        subsample_size = 10000
-        if X_binned_train.shape[0] < subsample_size:
-            X_binned_small_train = np.ascontiguousarray(X_binned_train)
-            y_small_train = y_train
-        else:
-            indices = rng.choice(
-                np.arange(X_binned_train.shape[0]), subsample_size)
+        if self.scoring is not None:
+            subsample_size = 10000
+            indices = np.arange(X_binned_train.shape[0])
+            if X_binned_train.shape[0] > subsample_size:
+                indices = rng.choice(indices, subsample_size)
             X_binned_small_train = X_binned_train[indices]
             y_small_train = y_train[indices]
+            # Predicting is faster of C-contiguous arrays.
+            X_binned_small_train = np.ascontiguousarray(X_binned_small_train)
 
         if self.verbose:
             print("Fitting gradient boosted rounds:")
@@ -236,14 +238,15 @@ class BaseGradientBoostingMachine(BaseEstimator, ABC):
                 toc_pred = time()
                 acc_prediction_time += toc_pred - tic_pred
 
-            should_stop = self._check_early_stopping(
-                X_binned_small_train, y_small_train,
-                X_binned_val, y_val)
+            if self.scoring is not None:
+                should_early_stop = self._check_early_stopping(
+                    X_binned_small_train, y_small_train,
+                    X_binned_val, y_val)
 
             if self.verbose:
                 self._print_iteration_stats(iteration_start_time)
 
-            if should_stop:
+            if self.scoring is not None and should_early_stop:
                 break
 
         if self.verbose:
@@ -279,11 +282,6 @@ class BaseGradientBoostingMachine(BaseEstimator, ABC):
 
         Scores are computed on validation data or on training data.
         """
-
-        if self.scoring is None:
-            # no early stopping.
-            # In sklearn early stopping is not done if n_iter_no_change is None
-            return False
 
         def _should_stop(scores):
             if len(scores) - 1 < self.n_iter_no_change:
