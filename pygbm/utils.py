@@ -1,3 +1,4 @@
+"""This module contains utility routines."""
 import numpy as np
 from numba import njit
 from numba import config as numba_config
@@ -60,10 +61,13 @@ def get_lightgbm_estimator(pygbm_estimator):
 
 
 @njit
-def _get_threads_chunks(total_size):
-    # Divide [0, total_size - 1] into n_threads contiguous regions, and
-    # returns the starts and ends of each region. Used to simulate a 'static'
-    # scheduling.
+def get_threads_chunks(total_size):
+    """Get start and end indices of threads in an array of size total_size.
+
+    The interval [0, total_size - 1] is divided into n_threads contiguous
+    regions, and the starts and ends of each region are returned. Used to
+    simulate a 'static' scheduling.
+    """
     n_threads = numba_config.NUMBA_DEFAULT_NUM_THREADS
     sizes = np.full(n_threads, total_size // n_threads, dtype=np.int32)
     if total_size % n_threads > 0:

@@ -7,11 +7,12 @@ import numpy as np
 from numba import njit, prange
 from time import time
 from sklearn.base import BaseEstimator, RegressorMixin, ClassifierMixin
-from sklearn.utils import check_X_y, check_random_state
+from sklearn.utils import check_X_y, check_random_state, check_array
+from sklearn.utils.validation import check_is_fitted
+from sklearn.utils.multiclass import check_classification_targets
 from sklearn.metrics import check_scoring
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder
-from sklearn.utils.validation import check_is_fitted
 
 from pygbm.binning import BinMapper
 from pygbm.grower import TreeGrower
@@ -93,12 +94,17 @@ class BaseGradientBoostingMachine(BaseEstimator, ABC):
         # TODO: add support for mixed-typed (numerical + categorical) data
         # TODO: add support for missing data
         # TODO: add support for pre-binned data (pass-through)?
-        # TODO: test input checking
         X, y = check_X_y(X, y, dtype=[np.float32, np.float64])
         y = self._encode_y(y)
+        if X.shape[0] == 1 or X.shape[1] == 1:
+            raise ValueError(
+                'Passing only one sample or one feature is not supported yet. '
+                'See numba issue #3569.'
+            )
         rng = check_random_state(self.random_state)
 
         self._validate_parameters()
+        self.n_features_ = X.shape[1]  # used for validation in predict()
 
         if self.verbose:
             print(f"Binning {X.nbytes / 1e9:.3f} GB of data: ", end="",
@@ -114,13 +120,20 @@ class BaseGradientBoostingMachine(BaseEstimator, ABC):
 
         self.loss_ = self._get_loss()
 
-        if self.validation_split is not None:
+        if self.scoring is not None and self.validation_split is not None:
             # stratify for classification
             stratify = y if hasattr(self.loss_, 'predict_proba') else None
 
             X_binned_train, X_binned_val, y_train, y_val = train_test_split(
                 X_binned, y, test_size=self.validation_split,
                 stratify=stratify, random_state=rng)
+            if X_binned_train.size == 0 or X_binned_val.size == 0:
+                raise ValueError(
+                    f'Not enough data (n_samples={X_binned.shape[0]}) to '
+                    f'perform early stopping with validation_split='
+                    f'{self.validation_split}. Use more training data or '
+                    f'adjust validation_split.'
+                )
             # Histogram computation is faster on feature-aligned data.
             X_binned_train = np.asfortranarray(X_binned_train)
         else:
@@ -350,7 +363,13 @@ class BaseGradientBoostingMachine(BaseEstimator, ABC):
         raw_predictions : array, shape (n_samples * n_trees_per_iteration,)
             The raw predicted values.
         """
-        # TODO: check input / check_fitted
+        X = check_array(X)
+        check_is_fitted(self, 'predictors_')
+        if X.shape[1] != self.n_features_:
+            raise ValueError(
+                f'X has {X.shape[1]} features but this estimator was '
+                f'trained with {self.n_features_} features.'
+            )
         n_samples = X.shape[0]
         raw_predictions = np.zeros(
             shape=(n_samples, self.n_trees_per_iteration_),
@@ -390,21 +409,23 @@ class GradientBoostingRegressor(BaseGradientBoostingMachine, RegressorMixin):
     ----------
     loss : {'least_squares'}, optional(default='least_squares')
         The loss function to use in the boosting process.
-    learning_rate : float, optional(default=TODO)
+    learning_rate : float, optional(default=0.1)
         The learning rate, also known as *shrinkage*. This is used as a
-        multiplicative factor for the leaves values.
-    max_iter : int, optional(default=TODO)
+        multiplicative factor for the leaves values. Use ``1`` for no
+        shrinkage.
+    max_iter : int, optional(default=100)
         The maximum number of iterations of the boosting process, i.e. the
         maximum number of trees.
-    max_leaf_nodes : int, optional(default=TODO)
-        The maximum number of leaves for each tree.
-    max_depth : int, optional(default=TODO)
+    max_leaf_nodes : int or None, optional(default=None)
+        The maximum number of leaves for each tree. If None, there is no
+        maximum limit.
+    max_depth : int or None, optional(default=None)
         The maximum depth of each tree. The depth of a tree is the number of
         nodes to go from the root to the deepest leaf.
-    min_samples_leaf : int, optional(default=TODO)
+    min_samples_leaf : int, optional(default=20)
         The minimum number of samples per leaf.
-    l2_regularization : float, optional(default=TODO)
-        The L2 regularization parameter.
+    l2_regularization : float, optional(default=0)
+        The L2 regularization parameter. Use 0 for no regularization.
     max_bins : int, optional(default=256)
         The maximum number of bins to use. Before training, each feature of
         the input array ``X`` is binned into at most ``max_bins`` bins, which
@@ -438,6 +459,16 @@ class GradientBoostingRegressor(BaseGradientBoostingMachine, RegressorMixin):
         is enabled. See
         `scikit-learn glossary
         <https://scikit-learn.org/stable/glossary.html#term-random-state>`_.
+
+
+    Examples
+    --------
+    >>> from sklearn.datasets import load_boston
+    >>> from pygbm import GradientBoostingRegressor
+    >>> X, y = load_boston(return_X_y=True)
+    >>> est = GradientBoostingRegressor().fit(X, y)
+    >>> est.score(X, y)
+    0.92...
     """
 
     _VALID_LOSSES = ('least_squares',)
@@ -512,22 +543,24 @@ class GradientBoostingClassifier(BaseGradientBoostingMachine, ClassifierMixin):
         generalizes to 'categorical_crossentropy' for multiclass
         classification. 'auto' will automatically choose eiher loss depending
         on the nature of the problem.
-    learning_rate : float, optional(default=TODO)
+    learning_rate : float, optional(default=1)
         The learning rate, also known as *shrinkage*. This is used as a
-        multiplicative factor for the leaves values.
-    max_iter : int, optional(default=TODO)
+        multiplicative factor for the leaves values. Use ``1`` for no
+        shrinkage.
+    max_iter : int, optional(default=100)
         The maximum number of iterations of the boosting process, i.e. the
         maximum number of trees for binary classification. For multiclass
         classification, `n_classes` trees per iteration are built.
-    max_leaf_nodes : int, optional(default=TODO)
-        The maximum number of leaves for each tree.
-    max_depth : int, optional(default=TODO)
+    max_leaf_nodes : int or None, optional(default=None)
+        The maximum number of leaves for each tree. If None, there is no
+        maximum limit.
+    max_depth : int or None, optional(default=None)
         The maximum depth of each tree. The depth of a tree is the number of
         nodes to go from the root to the deepest leaf.
-    min_samples_leaf : int, optional(default=TODO)
+    min_samples_leaf : int, optional(default=20)
         The minimum number of samples per leaf.
-    l2_regularization : float, optional(default=TODO)
-        The L2 regularization parameter.
+    l2_regularization : float, optional(default=0)
+        The L2 regularization parameter. Use 0 for no regularization.
     max_bins : int, optional(default=256)
         The maximum number of bins to use. Before training, each feature of
         the input array ``X`` is binned into at most ``max_bins`` bins, which
@@ -559,6 +592,15 @@ class GradientBoostingClassifier(BaseGradientBoostingMachine, ClassifierMixin):
         binning process, and the train/validation data split if early stopping
         is enabled. See `scikit-learn glossary
         <https://scikit-learn.org/stable/glossary.html#term-random-state>`_.
+
+    Examples
+    --------
+    >>> from sklearn.datasets import load_iris
+    >>> from pygbm import GradientBoostingClassifier
+    >>> X, y = load_iris(return_X_y=True)
+    >>> clf = GradientBoostingClassifier().fit(X, y)
+    >>> clf.score(X, y)
+    0.97...
     """
 
     _VALID_LOSSES = ('binary_crossentropy', 'categorical_crossentropy',
@@ -632,6 +674,8 @@ class GradientBoostingClassifier(BaseGradientBoostingMachine, ClassifierMixin):
     def _encode_y(self, y):
         # encode classes into 0 ... n_classes - 1 and sets attributes classes_
         # and n_trees_per_iteration_
+        check_classification_targets(y)
+
         label_encoder = LabelEncoder()
         encoded_y = label_encoder.fit_transform(y)
         self.classes_ = label_encoder.classes_

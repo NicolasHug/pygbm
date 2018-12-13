@@ -1,4 +1,10 @@
-# from collections import namedtuple
+"""This module contains njitted routines and data structures to:
+
+- Find the best possible split of a node. For a given node, a split is
+  characterized by a feature and a bin.
+- Apply a split to a node, i.e. split the indices of the samples at the node
+  into the newly created left and right childs.
+"""
 import numpy as np
 from numba import njit, jitclass, prange, float32, uint8, uint32
 import numba
@@ -9,7 +15,7 @@ from .histogram import _build_histogram_no_hessian
 from .histogram import _build_histogram_root
 from .histogram import _build_histogram_root_no_hessian
 from .histogram import HISTOGRAM_DTYPE
-from .utils import _get_threads_chunks
+from .utils import get_threads_chunks
 
 
 @jitclass([
@@ -333,12 +339,12 @@ def find_node_split(context, sample_indices):
     ordered_hessians = ctx.ordered_hessians
 
     # Populate ordered_gradients and ordered_hessians. (Already done for root)
+    # Ordering the gradients and hessians helps to improve cache hit.
     # This is a parallelized version of the following vanilla code:
     # for i range(n_samples):
     #     ctx.ordered_gradients[i] = ctx.gradients[samples_indices[i]]
-    # Ordering the gradients and hessians helps to improve cache hit.
     if sample_indices.shape[0] != ctx.gradients.shape[0]:
-        starts, ends, n_threads = _get_threads_chunks(n_samples)
+        starts, ends, n_threads = get_threads_chunks(n_samples)
         if ctx.constant_hessian:
             for thread_idx in prange(n_threads):
                 for i in range(starts[thread_idx], ends[thread_idx]):
