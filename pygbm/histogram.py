@@ -1,4 +1,5 @@
 """This module contains njitted routines for building histograms.
+
 A histogram is an array with n_bins entry of type HISTOGRAM_DTYPE. Each
 feature has its own histogram. A histogram contains the sum of gradients and
 hessians of all the samples belonging to each bin.
@@ -87,7 +88,8 @@ def _build_histogram_no_hessian(n_bins, sample_indices, binned_feature,
                                 ordered_gradients):
     """Return histogram for a given feature.
 
-    Hessians are not updated (used when hessians are constant)"""
+    Hessians are not updated (used when hessians are constant).
+    """
     histogram = np.zeros(n_bins, dtype=HISTOGRAM_DTYPE)
     n_node_samples = sample_indices.shape[0]
     unrolled_upper = (n_node_samples // 4) * 4

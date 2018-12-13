@@ -204,3 +204,17 @@ def test_n_bins_per_feature(max_bins, diff):
     X = np.array(X).reshape(-1, 1)
     mapper = BinMapper(max_bins=max_bins).fit(X)
     assert np.all(mapper.n_bins_per_feature_ == min(max_bins, n_unique_values))
+
+
+def test_subsample():
+    # Make sure bin thresholds are different when applying subsampling
+    mapper_no_subsample = BinMapper(subsample=None, random_state=0).fit(DATA)
+    mapper_subsample = BinMapper(subsample=256, random_state=0).fit(DATA)
+
+    for feature in range(DATA.shape[1]):
+        with pytest.raises(AssertionError):
+            np.testing.assert_array_almost_equal(
+                mapper_no_subsample.bin_thresholds_[feature],
+                mapper_subsample.bin_thresholds_[feature],
+                decimal=3
+            )

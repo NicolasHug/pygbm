@@ -1,7 +1,8 @@
 """
-This module contains the TreeGrower class which builds a regression tree
-fitting a Newton-Raphson step, based on the gradients and hessians of the
-training data.
+This module contains the TreeGrower class.
+
+TreeGrowee builds a regression tree fitting a Newton-Raphson step, based on
+the gradients and hessians of the training data.
 """
 from heapq import heappush, heappop
 import numpy as np

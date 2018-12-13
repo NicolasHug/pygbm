@@ -1,6 +1,8 @@
 """
-This module contains the loss classes used for regression, binary
-classification or multiclass classification.
+This module contains the loss classes.
+
+Specific losses are used for regression, binary classification or multiclass
+classification.
 """
 from abc import ABC, abstractmethod
 
@@ -124,7 +126,7 @@ class LeastSquares(BaseLoss):
         loss = np.power(y_true - raw_predictions, 2)
         return loss.mean() if average else loss
 
-    def _inverse_link_function(self, raw_predictions):
+    def inverse_link_function(self, raw_predictions):
         return raw_predictions
 
     def update_gradients_and_hessians(self, gradients, hessians, y_true,
@@ -160,7 +162,7 @@ class BinaryCrossEntropy(BaseLoss):
     """
 
     hessian_is_constant = False
-    _inverse_link_function = staticmethod(expit)
+    inverse_link_function = staticmethod(expit)
 
     def __call__(self, y_true, raw_predictions, average=True):
         # shape (n_samples, 1) --> (n_samples,). reshape(-1) is more likely to

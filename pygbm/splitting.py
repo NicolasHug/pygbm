@@ -1,4 +1,4 @@
-"""This module contains njitted rountines and data structures to:
+"""This module contains njitted routines and data structures to:
 
 - Find the best possible split of a node. For a given node, a split is
   characterized by a feature and a bin.

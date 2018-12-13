@@ -1,6 +1,8 @@
 """
-This module contains the BinMapper class used for mapping a real-valued
-dataset into integer-valued bins with equally-spaced thresholds.
+This module contains the BinMapper class.
+
+BinMapper is used for mapping a real-valued dataset into integer-valued bins
+with equally-spaced thresholds.
 """
 import numpy as np
 from numba import njit, prange
@@ -23,7 +25,7 @@ def _find_binning_thresholds(data, max_bins=256, subsample=int(2e5),
         raise ValueError(f'max_bins={max_bins} should be no smaller than 2 '
                          f'and no larger than 256.')
     rng = check_random_state(random_state)
-    if data.shape[0] > subsample:
+    if subsample is not None and data.shape[0] > subsample:
         subset = rng.choice(np.arange(data.shape[0]), subsample)
         data = data[subset]
     dtype = data.dtype
@@ -121,10 +123,11 @@ class BinMapper(BaseEstimator, TransformerMixin):
     max_bins : int, optional (default=256)
         The maximum number of bins to use. If for a given feature the number of
         unique values is less than ``max_bins``, then those unique values
-        will be used instead of the quantiles.
-    subsample : int, optional (default=1e5)
+        will be used to compute the bin thresholds, instead of the quantiles.
+    subsample : int or None, optional (default=1e5)
         If ``n_samples > subsample``, then ``sub_samples`` samples will be
-        randomly choosen to compute the quantiles.
+        randomly choosen to compute the quantiles. If ``None``, the whole data
+        is used.
     random_state: int or numpy.random.RandomState or None, \
         optional (default=None)
         Pseudo-random number generator to control the random sub-sampling.
@@ -133,7 +136,7 @@ class BinMapper(BaseEstimator, TransformerMixin):
     """
     def __init__(self, max_bins=256, subsample=int(1e5), random_state=None):
         self.max_bins = max_bins
-        self.subsample = subsample  # TODO: accept None?
+        self.subsample = subsample
         self.random_state = random_state
 
     def fit(self, X, y=None):
@@ -170,5 +173,6 @@ class BinMapper(BaseEstimator, TransformerMixin):
         Returns
         -------
         X_binned : array-like
-            The binned data"""
+            The binned data
+        """
         return _map_to_bins(X, binning_thresholds=self.bin_thresholds_)
