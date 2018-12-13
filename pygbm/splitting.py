@@ -1,13 +1,21 @@
-# from collections import namedtuple
+"""This module contains njitted routines and data structures to:
+
+- Find the best possible split of a node. For a given node, a split is
+  characterized by a feature and a bin.
+- Apply a split to a node, i.e. split the indices of the samples at the node
+  into the newly created left and right childs.
+"""
 import numpy as np
 from numba import njit, jitclass, prange, float32, uint8, uint32
 import numba
+
 from .histogram import _build_histogram
 from .histogram import _subtract_histograms
 from .histogram import _build_histogram_no_hessian
 from .histogram import _build_histogram_root
 from .histogram import _build_histogram_root_no_hessian
 from .histogram import HISTOGRAM_DTYPE
+from .utils import get_threads_chunks
 
 
 @jitclass([
@@ -331,30 +339,19 @@ def find_node_split(context, sample_indices):
     ordered_hessians = ctx.ordered_hessians
 
     # Populate ordered_gradients and ordered_hessians. (Already done for root)
+    # Ordering the gradients and hessians helps to improve cache hit.
     # This is a parallelized version of the following vanilla code:
     # for i range(n_samples):
     #     ctx.ordered_gradients[i] = ctx.gradients[samples_indices[i]]
-    # Ordering the gradients and hessians helps to improve cache hit.
     if sample_indices.shape[0] != ctx.gradients.shape[0]:
-        n_threads = numba.config.NUMBA_DEFAULT_NUM_THREADS
-        # Each threads writes data in ordered_xx from starts[thread_idx] to
-        # starts[thread_idx] + sizes[thread_idx]
-        sizes = np.full(n_threads, n_samples // n_threads, dtype=np.int32)
-        if n_samples % n_threads > 0:
-            # array[:0] will cause a bug in numba 0.41 so we need the if.
-            # Remove once issue numba 3554 is fixed.
-            sizes[:n_samples % n_threads] += 1
-        starts = np.zeros(n_threads, dtype=np.int32)
-        starts[1:] = np.cumsum(sizes[:-1])
+        starts, ends, n_threads = get_threads_chunks(n_samples)
         if ctx.constant_hessian:
             for thread_idx in prange(n_threads):
-                for i in range(starts[thread_idx],
-                               starts[thread_idx] + sizes[thread_idx]):
+                for i in range(starts[thread_idx], ends[thread_idx]):
                     ordered_gradients[i] = ctx.gradients[sample_indices[i]]
         else:
             for thread_idx in prange(n_threads):
-                for i in range(starts[thread_idx],
-                               starts[thread_idx] + sizes[thread_idx]):
+                for i in range(starts[thread_idx], ends[thread_idx]):
                     ordered_gradients[i] = ctx.gradients[sample_indices[i]]
                     ordered_hessians[i] = ctx.hessians[sample_indices[i]]
 
