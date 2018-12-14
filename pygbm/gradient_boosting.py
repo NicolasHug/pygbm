@@ -275,45 +275,37 @@ class BaseGradientBoostingMachine(BaseEstimator, ABC):
                               X_binned_val, y_val):
         """Check if fitting should be early-stopped.
 
-        Return True (do early stopping) if the score at iteration i hasn't
-        improved any of the last n_iter_no_change scores by at least tol
-        percent.
-
         Scores are computed on validation data or on training data.
         """
-
-        def _should_stop(scores):
-            if len(scores) - 1 < self.n_iter_no_change:
-                # - 1 because scores[0] is for the init model before the first
-                # tree.
-                return False
-
-            # The higher the tol, the more likely we are to early stop. We
-            # thus want to (artificially) increase the value of prev_score by
-            # tol percent and check if it's higher than the current score, in
-            # which case we early stop. As in scikit-learn scorers "higher is
-            # always better", the 'error' metrics such as `neg_mse` or
-            # `neg_log_loss` output negative values so the scores are
-            # negative. We thus need to multiply tol by -1 in those cases,
-            # else we would actually decrease prev_score instead of increasing
-            # it.
-
-            current_score = scores[-1]  # score at current iteration
-            previous_scores = scores[-self.n_iter_no_change:-1]
-            sign = self.scorer_._sign
-            return all(
-                current_score < prev_score * (1 + self.tol * sign)
-                for prev_score in previous_scores
-            )
 
         self.train_scores_.append(self.scorer_(self, X_binned_train, y_train))
 
         if self.validation_split is not None:
             self.validation_scores_.append(
                 self.scorer_(self, X_binned_val, y_val))
-            return _should_stop(self.validation_scores_)
+            return self._should_stop(self.validation_scores_)
 
-        return _should_stop(self.train_scores_)
+        return self._should_stop(self.train_scores_)
+
+    def _should_stop(self, scores):
+        """
+        Return True (do early stopping) if the last n scores aren't better
+        than the (n-1)th-to-last score, up to some tolerance.
+        """
+        reference_position = self.n_iter_no_change + 1
+        if len(scores) < reference_position:
+            return False
+
+        # A higher score is always better. Higher tol means that it will be
+        # harder for subsequent iteration to be considered an improvement upon
+        # the reference score, and therefore it is more likely to early stop
+        # because of the lack of significant improvement.
+        tol = 0 if self.tol is None else self.tol
+        reference_score = scores[-reference_position] + tol
+        recent_scores = scores[-reference_position + 1:]
+        recent_improvements = [score > reference_score
+                               for score in recent_scores]
+        return not any(recent_improvements)
 
     def _print_iteration_stats(self, iteration_start_time):
         """Print info about the current fitting iteration."""
@@ -438,13 +430,14 @@ class GradientBoostingRegressor(BaseGradientBoostingMachine, RegressorMixin):
         the whole training data.
     n_iter_no_change : int, optional (default=5)
         Used to determine when to "early stop". The fitting process is
-        stopped when the score of the last iteration hasn't improved any of
-        the last ``n_iter_no_change`` iterations scores by at least ``tol``
-        percent.
+        stopped when none of the last ``n_iter_no_change`` scores are better
+        than the ``n_iter_no_change - 1``th-to-last one, up to some
+        tolerance.
     tol : float or None optional (default=1e-7)
-        Tolerance (as a percentage) for comparing the last
-        ``n_iter_no_change`` scores. A higher tolerance leads to a higher
-        chance to early-stop.
+        The absolute tolerance to use when comparing scores. The higher the
+        tolerance, the more likely we are to early stop: higher tolerance
+        means that it will be harder for subsequent iterations to be
+        considered an improvement upon the reference score.
     verbose: int, optional (default=0)
         The verbosity level. If not zero, print some information about the
         fitting process.
@@ -556,13 +549,14 @@ class GradientBoostingClassifier(BaseGradientBoostingMachine, ClassifierMixin):
         the whole training data.
     n_iter_no_change : int, optional (default=5)
         Used to determine when to "early stop". The fitting process is
-        stopped when the score of the last iteration hasn't improved any of
-        the last ``n_iter_no_change`` iterations scores by at least ``tol``
-        percent.
+        stopped when none of the last ``n_iter_no_change`` scores are better
+        than the ``n_iter_no_change - 1``th-to-last one, up to some
+        tolerance.
     tol : float or None optional (default=1e-7)
-        Tolerance (as a percentage) for comparing the last
-        ``n_iter_no_change`` scores. A higher tolerance leads to a higher
-        chance to early-stop.
+        The absolute tolerance to use when comparing scores. The higher the
+        tolerance, the more likely we are to early stop: higher tolerance
+        means that it will be harder for subsequent iterations to be
+        considered an improvement upon the reference score.
     verbose: int, optional(default=0)
         The verbosity level. If not zero, print some information about the
         fitting process.
