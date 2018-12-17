@@ -70,7 +70,22 @@ def test_pre_binned_data():
     assert_raises_regex(
         ValueError,
         'This predictor does not have numerical thresholds',
-        predictor.predict, X_binned
+        predictor.predict, X
     )
 
-    predictor.predict_binned(X)  # No error
+    assert_raises_regex(
+        ValueError,
+        'binned_data dtype should be uint8',
+        predictor.predict_binned, X
+    )
+
+    predictor.predict_binned(X_binned)  # No error
+
+    predictor = grower.make_predictor(
+        numerical_thresholds=mapper.numerical_thresholds_
+    )
+    assert_raises_regex(
+        ValueError,
+        'X dtype should be float32 or float64',
+        predictor.predict, X_binned
+    )

@@ -55,6 +55,10 @@ class TreePredictor:
         y : array, shape (n_samples,)
             The raw predicted values.
         """
+
+        if binned_data.dtype != np.uint8:
+            raise ValueError('binned_data dtype should be uint8')
+
         if out is None:
             out = np.empty(binned_data.shape[0], dtype=np.float32)
         _predict_binned(self.nodes, binned_data, out)
@@ -81,6 +85,9 @@ class TreePredictor:
                 'This predictor does not have numerical thresholds so it can'
                 'only predict pre-binned data.'
             )
+
+        if X.dtype == np.uint8:
+            raise ValueError('X dtype should be float32 or float64')
 
         out = np.empty(X.shape[0], dtype=np.float32)
         _predict_from_numeric_data(self.nodes, X, out)

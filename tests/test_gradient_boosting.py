@@ -2,6 +2,7 @@ import os
 import warnings
 
 import numpy as np
+from numpy.testing import assert_allclose
 import pytest
 from sklearn.utils.testing import assert_raises_regex
 from sklearn.datasets import make_classification, make_regression
@@ -271,10 +272,8 @@ def test_pre_binned_data():
     fit_binned_pred_binned = gbdt.fit(X_binned, y).predict(X_binned)
     fit_num_pred_binned = gbdt.fit(X, y).predict(X_binned)
 
-    np.testing.assert_array_almost_equal(fit_num_pred_num,
-                                         fit_binned_pred_binned)
-    np.testing.assert_array_almost_equal(fit_num_pred_num,
-                                         fit_num_pred_binned)
+    assert_allclose(fit_num_pred_num, fit_binned_pred_binned)
+    assert_allclose(fit_num_pred_num, fit_num_pred_binned)
 
     assert_raises_regex(
         ValueError,

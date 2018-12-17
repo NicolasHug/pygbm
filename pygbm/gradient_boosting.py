@@ -69,7 +69,7 @@ class BaseGradientBoostingMachine(BaseEstimator, ABC):
         if self.tol is not None and self.tol < 0:
             raise ValueError(f'tol={self.tol} '
                              f'must not be smaller than 0.')
-        if self.train_data_is_pre_binned_:
+        if X.dtype == np.uint8:  # pre-binned data
             max_bin_index = X.max()
             if self.max_bins < max_bin_index + 1:
                 raise ValueError(
@@ -112,11 +112,10 @@ class BaseGradientBoostingMachine(BaseEstimator, ABC):
             )
         rng = check_random_state(self.random_state)
 
-        self.train_data_is_pre_binned_ = X.dtype == np.uint8
         self._validate_parameters(X)
         self.n_features_ = X.shape[1]  # used for validation in predict()
 
-        if self.train_data_is_pre_binned_:
+        if X.dtype == np.uint8:  # data is pre-binned
             if self.verbose:
                 print("X is pre-binned.")
             X_binned = X
@@ -389,7 +388,7 @@ class BaseGradientBoostingMachine(BaseEstimator, ABC):
                 f'trained with {self.n_features_} features.'
             )
         is_binned = X.dtype == np.uint8
-        if not is_binned and self.train_data_is_pre_binned_:
+        if not is_binned and self.bin_mapper_ is None:
             raise ValueError(
                 'This estimator was fitted with pre-binned data and '
                 'can only predict pre-binned data as well. If your data *is* '
