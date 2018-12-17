@@ -120,10 +120,10 @@ class BaseGradientBoostingMachine(BaseEstimator, ABC):
 
         self.loss_ = self._get_loss()
 
-        self.do_early_stopping_ = (self.n_iter_no_change is not None and
-                                   self.n_iter_no_change > 0)
+        do_early_stopping = (self.n_iter_no_change is not None and
+                             self.n_iter_no_change > 0)
 
-        if self.do_early_stopping_ and self.validation_split is not None:
+        if do_early_stopping and self.validation_split is not None:
             # stratify for classification
             stratify = y if hasattr(self.loss_, 'predict_proba') else None
 
@@ -146,7 +146,7 @@ class BaseGradientBoostingMachine(BaseEstimator, ABC):
             X_binned_val, y_val = None, None
 
         # Subsample the training set for score-based monitoring.
-        if self.do_early_stopping_:
+        if do_early_stopping:
             subsample_size = 10000
             indices = np.arange(X_binned_train.shape[0])
             if X_binned_train.shape[0] > subsample_size:
@@ -186,7 +186,7 @@ class BaseGradientBoostingMachine(BaseEstimator, ABC):
         self.scorer_ = check_scoring(self, self.scoring)
         self.train_scores_ = []
         self.validation_scores_ = []
-        if self.do_early_stopping_:
+        if do_early_stopping:
             # Add predictions of the initial model (before the first tree)
             self.train_scores_.append(
                 self._get_scores(X_binned_train, y_train))
@@ -246,13 +246,14 @@ class BaseGradientBoostingMachine(BaseEstimator, ABC):
                 acc_prediction_time += toc_pred - tic_pred
 
             should_early_stop = False
-            if self.do_early_stopping_:
+            if do_early_stopping:
                 should_early_stop = self._check_early_stopping(
                     X_binned_small_train, y_small_train,
                     X_binned_val, y_val)
 
             if self.verbose:
-                self._print_iteration_stats(iteration_start_time)
+                self._print_iteration_stats(iteration_start_time,
+                                            do_early_stopping)
 
             if should_early_stop:
                 break
@@ -326,11 +327,11 @@ class BaseGradientBoostingMachine(BaseEstimator, ABC):
         if self.scoring is not None:
             return self.scorer_(self, X, y)
 
-        # Else, use loss
+        # Else, use the negative loss as score.
         raw_predictions = self._raw_predict(X)
         return -self.loss_(y, raw_predictions)
 
-    def _print_iteration_stats(self, iteration_start_time):
+    def _print_iteration_stats(self, iteration_start_time, do_early_stopping):
         """Print info about the current fitting iteration."""
         log_msg = ''
 
@@ -352,7 +353,7 @@ class BaseGradientBoostingMachine(BaseEstimator, ABC):
 
         log_msg += f"max depth = {max_depth}, "
 
-        if self.do_early_stopping_:
+        if do_early_stopping:
             log_msg += f"{self.scoring} train: {self.train_scores_[-1]:.5f}, "
             if self.validation_split is not None:
                 log_msg += (f"{self.scoring} val: "
