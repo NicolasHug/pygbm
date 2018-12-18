@@ -86,6 +86,6 @@ def test_pre_binned_data():
     )
     assert_raises_regex(
         ValueError,
-        'X dtype should be float32 or float64',
+        'X has uint8 dtype',
         predictor.predict, X_binned
     )

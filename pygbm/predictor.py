@@ -87,7 +87,11 @@ class TreePredictor:
             )
 
         if X.dtype == np.uint8:
-            raise ValueError('X dtype should be float32 or float64')
+            raise ValueError(
+                'X has uint8 dtype: use estimator.predict(X) if X is '
+                'pre-binned, or convert X to a float32 dtype to be treated '
+                'as numerical data'
+            )
 
         out = np.empty(X.shape[0], dtype=np.float32)
         _predict_from_numeric_data(self.nodes, X, out)

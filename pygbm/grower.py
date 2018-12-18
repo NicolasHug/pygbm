@@ -419,8 +419,8 @@ class TreeGrower:
         Parameters
         ----------
         numerical_thresholds : array-like of floats, optional (default=None)
-            The actual thresholds values of each bin. None if the training data
-            was pre-binned.
+            The actual thresholds values of each bin, expected to be in sorted
+            increasing order. None if the training data was pre-binned.
 
         Returns
         -------

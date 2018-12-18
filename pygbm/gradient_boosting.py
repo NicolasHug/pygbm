@@ -73,8 +73,8 @@ class BaseGradientBoostingMachine(BaseEstimator, ABC):
             max_bin_index = X.max()
             if self.max_bins < max_bin_index + 1:
                 raise ValueError(
-                    f'Data is pre-binned and max_bins={self.max_bins}, '
-                    f'but data has {max_bin_index + 1} bins.'
+                    f'max_bins is set to {self.max_bins} but the data is '
+                    f'pre-binned with {max_bin_index + 1} bins.'
                 )
 
     def fit(self, X, y):

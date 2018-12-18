@@ -74,7 +74,7 @@ def test_init_parameters_validation(GradientBoosting, X, y):
 
     assert_raises_regex(
         ValueError,
-        f"Data is pre-binned and max_bins=4, but data has 256 bins",
+        f"max_bins is set to 4 but the data is pre-binned with 256 bins",
         GradientBoosting(max_bins=4).fit, X.astype(np.uint8), y
     )
 
