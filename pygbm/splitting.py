@@ -81,7 +81,7 @@ class SplitInfo:
     ('ordered_hessians', float32[::1]),
     ('sum_gradients', float32),
     ('sum_hessians', float32),
-    ('constant_hessian', uint8),
+    ('hessian_is_constant', uint8),
     ('constant_hessian_value', float32),
     ('l2_regularization', float32),
     ('min_hessian_to_split', float32),
@@ -126,9 +126,9 @@ class SplittingContext:
         be ignored.
     """
     def __init__(self, X_binned, max_bins, n_bins_per_feature,
-                 gradients, hessians, l2_regularization,
-                 min_hessian_to_split=1e-3, min_samples_leaf=20,
-                 min_gain_to_split=0.):
+                 l2_regularization, min_hessian_to_split=1e-3,
+                 min_samples_leaf=20, min_gain_to_split=0.,
+                 hessian_is_constant=False):
 
         self.X_binned = X_binned
         self.n_features = X_binned.shape[1]
@@ -136,22 +136,17 @@ class SplittingContext:
         # last bins may be unused if n_bins_per_feature[f] < max_bins
         self.max_bins = max_bins
         self.n_bins_per_feature = n_bins_per_feature
-        self.gradients = gradients
-        self.hessians = hessians
-        # for root node, gradients and hessians are already ordered
-        self.ordered_gradients = gradients.copy()
-        self.ordered_hessians = hessians.copy()
-        self.sum_gradients = self.gradients.sum()
-        self.sum_hessians = self.hessians.sum()
-        self.constant_hessian = hessians.shape[0] == 1
         self.l2_regularization = l2_regularization
         self.min_hessian_to_split = min_hessian_to_split
         self.min_samples_leaf = min_samples_leaf
         self.min_gain_to_split = min_gain_to_split
-        if self.constant_hessian:
-            self.constant_hessian_value = self.hessians[0]  # 1 scalar
+
+        self.hessian_is_constant = hessian_is_constant
+        self.ordered_gradients = np.empty(X_binned.shape[0], dtype=np.float32)
+        if self.hessian_is_constant:
+            self.ordered_hessians = np.empty(1, dtype=np.float32)  # won't be used anyway
         else:
-            self.constant_hessian_value = float32(1.)  # won't be used anyway
+            self.ordered_hessians = np.empty(X_binned.shape[0], dtype=np.float32)
 
         # The partition array maps each sample index into the leaves of the
         # tree (a leaf in this context is a node that isn't splitted yet, not
@@ -162,10 +157,32 @@ class SplittingContext:
         # partition = [cef|abdghijkl]
         # we have 2 leaves, the left one is at position 0 and the second one at
         # position 3. The order of the samples is irrelevant.
-        self.partition = np.arange(0, X_binned.shape[0], 1, np.uint32)
+        self.partition = np.empty(X_binned.shape[0], dtype=np.uint32)
         # buffers used in split_indices to support parallel splitting.
-        self.left_indices_buffer = np.empty_like(self.partition)
-        self.right_indices_buffer = np.empty_like(self.partition)
+        self.left_indices_buffer = np.empty(X_binned.shape[0], dtype=np.uint32)
+        self.right_indices_buffer = np.empty(X_binned.shape[0], dtype=np.uint32)
+
+    # TODO: parallelize this
+    def reset(self, gradients, hessians):
+        self.gradients = gradients
+        self.hessians = hessians
+
+        # for root node, gradients and hessians are already ordered
+        self.sum_gradients = self.gradients.sum()
+        self.sum_hessians = self.hessians.sum()
+
+        n_samples = gradients.shape[0]
+        for i in range(n_samples):
+            self.ordered_gradients[i] = gradients[i]
+        if self.hessian_is_constant:
+            self.constant_hessian_value = self.hessians[0] # 1 scalar
+        else:
+            self.constant_hessian_value = float32(1.) # won't be used anyway
+            for i in range(n_samples):
+                self.ordered_hessians[i] = hessians[i]
+
+        for i in range(n_samples):
+            self.partition[i] = i
 
 
 @njit(parallel=True,
@@ -345,7 +362,7 @@ def find_node_split(context, sample_indices):
     #     ctx.ordered_gradients[i] = ctx.gradients[samples_indices[i]]
     if sample_indices.shape[0] != ctx.gradients.shape[0]:
         starts, ends, n_threads = get_threads_chunks(n_samples)
-        if ctx.constant_hessian:
+        if ctx.hessian_is_constant:
             for thread_idx in prange(n_threads):
                 for i in range(starts[thread_idx], ends[thread_idx]):
                     ordered_gradients[i] = ctx.gradients[sample_indices[i]]
@@ -356,7 +373,7 @@ def find_node_split(context, sample_indices):
                     ordered_hessians[i] = ctx.hessians[sample_indices[i]]
 
     ctx.sum_gradients = ctx.ordered_gradients[:n_samples].sum()
-    if ctx.constant_hessian:
+    if ctx.hessian_is_constant:
         ctx.sum_hessians = ctx.constant_hessian_value * float32(n_samples)
     else:
         ctx.sum_hessians = ctx.ordered_hessians[:n_samples].sum()
@@ -426,7 +443,7 @@ def find_node_split_subtraction(context, sample_indices, parent_histograms,
                              sibling_histograms[0]['sum_gradients'].sum())
 
     n_samples = sample_indices.shape[0]
-    if context.constant_hessian:
+    if context.hessian_is_constant:
         context.sum_hessians = \
             context.constant_hessian_value * float32(n_samples)
     else:
@@ -476,7 +493,7 @@ def _find_histogram_split(context, feature_idx, sample_indices):
     ordered_hessians = context.ordered_hessians[:n_samples]
 
     if root_node:
-        if context.constant_hessian:
+        if context.hessian_is_constant:
             histogram = _build_histogram_root_no_hessian(
                 context.max_bins, X_binned, ordered_gradients)
         else:
@@ -484,7 +501,7 @@ def _find_histogram_split(context, feature_idx, sample_indices):
                 context.max_bins, X_binned, ordered_gradients,
                 context.ordered_hessians)
     else:
-        if context.constant_hessian:
+        if context.hessian_is_constant:
             histogram = _build_histogram_no_hessian(
                 context.max_bins, sample_indices, X_binned,
                 ordered_gradients)
@@ -537,7 +554,7 @@ def _find_best_bin_to_split_helper(context, feature_idx, histogram, n_samples):
         n_samples_left += histogram[bin_idx]['count']
         n_samples_right = n_samples - n_samples_left
 
-        if context.constant_hessian:
+        if context.hessian_is_constant:
             hessian_left += (histogram[bin_idx]['count']
                              * context.constant_hessian_value)
         else:

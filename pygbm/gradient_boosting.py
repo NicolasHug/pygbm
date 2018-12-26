@@ -228,6 +228,17 @@ class BaseGradientBoostingMachine(BaseEstimator, ABC):
                                                      y_train, raw_predictions)
 
             predictors.append([])
+            grower = TreeGrower(
+                X_binned_train,
+                max_bins=self.max_bins,
+                n_bins_per_feature=n_bins_per_feature,
+                max_leaf_nodes=self.max_leaf_nodes,
+                max_depth=self.max_depth,
+                min_samples_leaf=self.min_samples_leaf,
+                l2_regularization=self.l2_regularization,
+                shrinkage=self.learning_rate,
+                hessian_is_constant=self.loss_.hessian_is_constant
+            )
 
             # Build `n_trees_per_iteration` trees.
             for k, (gradients_at_k, hessians_at_k) in enumerate(zip(
@@ -238,15 +249,7 @@ class BaseGradientBoostingMachine(BaseEstimator, ABC):
                 # n_trees_per_iteration is 1 and xxxx_at_k is equivalent to the
                 # whole array.
 
-                grower = TreeGrower(
-                    X_binned_train, gradients_at_k, hessians_at_k,
-                    max_bins=self.max_bins,
-                    n_bins_per_feature=n_bins_per_feature,
-                    max_leaf_nodes=self.max_leaf_nodes,
-                    max_depth=self.max_depth,
-                    min_samples_leaf=self.min_samples_leaf,
-                    l2_regularization=self.l2_regularization,
-                    shrinkage=self.learning_rate)
+                grower.reset(gradients_at_k, hessians_at_k)
                 grower.grow()
 
                 acc_apply_split_time += grower.total_apply_split_time

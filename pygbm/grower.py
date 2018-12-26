@@ -160,10 +160,11 @@ class TreeGrower:
         The shrinkage parameter to apply to the leaves values, also known as
         learning rate.
     """
-    def __init__(self, X_binned, gradients, hessians, max_leaf_nodes=None,
-                 max_depth=None, min_samples_leaf=20, min_gain_to_split=0.,
-                 max_bins=256, n_bins_per_feature=None, l2_regularization=0.,
-                 min_hessian_to_split=1e-3, shrinkage=1.):
+    def __init__(self, X_binned, max_leaf_nodes=None, max_depth=None,
+                 min_samples_leaf=20, min_gain_to_split=0., max_bins=256,
+                 n_bins_per_feature=None, l2_regularization=0.,
+                 min_hessian_to_split=1e-3, shrinkage=1.,
+                 hessian_is_constant=False):
 
         self._validate_parameters(X_binned, max_leaf_nodes, max_depth,
                                   min_samples_leaf, min_gain_to_split,
@@ -178,15 +179,20 @@ class TreeGrower:
                 dtype=np.uint32)
 
         self.splitting_context = SplittingContext(
-            X_binned, max_bins, n_bins_per_feature, gradients,
-            hessians, l2_regularization, min_hessian_to_split,
-            min_samples_leaf, min_gain_to_split)
+            X_binned, max_bins, n_bins_per_feature, l2_regularization,
+            min_hessian_to_split, min_samples_leaf, min_gain_to_split,
+            hessian_is_constant)
+
         self.max_leaf_nodes = max_leaf_nodes
         self.max_depth = max_depth
         self.min_samples_leaf = min_samples_leaf
         self.X_binned = X_binned
         self.min_gain_to_split = min_gain_to_split
         self.shrinkage = shrinkage
+        self.hessian_is_constant = hessian_is_constant
+
+    def reset(self, gradients, hessians):
+        self.splitting_context.reset(gradients, hessians)
         self.splittable_nodes = []
         self.finalized_leaves = []
         self.total_find_split_time = 0.  # time spent finding the best splits
@@ -237,7 +243,7 @@ class TreeGrower:
         """Initialize root node and finalize it if needed."""
         n_samples = self.X_binned.shape[0]
         depth = 0
-        if self.splitting_context.constant_hessian:
+        if self.hessian_is_constant:
             hessian = self.splitting_context.hessians[0] * n_samples
         else:
             hessian = self.splitting_context.hessians.sum()

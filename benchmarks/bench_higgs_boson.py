@@ -86,7 +86,10 @@ pygbm_model = GradientBoostingClassifier(loss='binary_crossentropy',
                                          n_iter_no_change=None,
                                          random_state=0,
                                          verbose=1)
-pygbm_model.fit(data_train, target_train)
+@profile
+def fit():
+    pygbm_model.fit(data_train, target_train)
+fit()
 toc = time()
 predicted_test = pygbm_model.predict(data_test)
 roc_auc = roc_auc_score(target_test, predicted_test)
